@@ -412,8 +412,14 @@ if uploaded:
 
     # --- определение сегмента
     theme_cols = [c for c in df.columns if re.match(r"group_\d+_activity$", c)]
+    
+   # --- применяем функцию к каждой строке ---
     df['segment'] = df.apply(
-        lambda row: define_segment([{"theme": str(row[c]).lower().strip()} for c in theme_cols if pd.notna(row[c]) and str(row[c]).strip()]),
+        lambda row: define_segment([
+            {"theme": str(row[c]).lower().strip()}
+            for c in theme_cols
+            if pd.notna(row[c]) and str(row[c]).strip()
+        ]),
         axis=1
     )
 
@@ -428,16 +434,6 @@ if uploaded:
     selected_segment = st.selectbox("Фильтр по сегменту:", segment_options)
     if selected_segment != "Все":
         df = df[df["segment"] == selected_segment]
-    
-    # --- применяем функцию к каждой строке ---
-    df['segment'] = df.apply(
-        lambda row: define_segment([
-            {"theme": str(row[c]).lower().strip()}
-            for c in theme_cols
-            if pd.notna(row[c]) and str(row[c]).strip()
-        ]),
-        axis=1
-    )
 
     # --- отображение результата ---
     st.subheader("Результаты")
@@ -450,10 +446,19 @@ if uploaded:
     # --- визуализация распределения сегментов ---
     st.subheader("Распределение сегментов")
     
-    # опционально: фильтруем только пользователей
-    df = df[df['Тип аккаунта'] == 'пользователь']
-    
-    segment_counts = df['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
+    # --- визуализация распределения сегментов ---
+    st.subheader("Распределение сегментов")
+
+    # добавляем чекбокс: фильтровать ли только пользователей
+    show_only_users = st.checkbox("Показывать только пользователей в графике", value=True)
+
+    # создаём отдельную переменную для графика
+    df_plot = df[df['Тип аккаунта'] == 'пользователь'] if show_only_users else df
+
+    # считаем сегменты
+    segment_counts = df_plot['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
+
+    # отрисовка графика
     st.bar_chart(segment_counts)
     
     # --- кнопка скачивания ---
