@@ -442,12 +442,6 @@ if uploaded:
     col2.metric("Боты", (df["Тип аккаунта"] == "бот").sum())
     col3.metric("Пользователи", (df["Тип аккаунта"] == "пользователь").sum())
     st.dataframe(df, use_container_width=True, height=600)
-    
-    # --- визуализация распределения сегментов ---
-    st.subheader("Распределение сегментов")
-    
-    # --- визуализация распределения сегментов ---
-    st.subheader("Распределение сегментов")
 
     # добавляем чекбокс: фильтровать ли только пользователей
     show_only_users = st.checkbox("Показывать только пользователей в графике", value=True)
@@ -456,9 +450,8 @@ if uploaded:
     df_plot = df[df['Тип аккаунта'] == 'пользователь'] if show_only_users else df
 
     # считаем сегменты
+    st.subheader("Распределение сегментов")
     segment_counts = df_plot['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
-
-    # отрисовка графика
     st.bar_chart(segment_counts)
     
     # --- кнопка скачивания ---
