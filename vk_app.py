@@ -1,6 +1,8 @@
 import streamlit as st
+import openpyxl
 import pandas as pd
 import numpy as np
+import plotly.express as px
 import re
 from collections import Counter
 
@@ -459,7 +461,16 @@ if uploaded:
     # считаем сегменты
     st.subheader("Распределение сегментов")
     segment_counts = df_plot['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
-    st.bar_chart(segment_counts)
+    fig = px.bar(
+        segment_counts.head(10).reset_index(),
+        x='index',
+        y='segment',
+        labels={'index': 'Сегмент', 'segment': 'Количество'},
+        title="Топ-10 сегментов",
+        height=500
+    )
+    fig.update_layout(xaxis_tickangle=-45)
+    st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("📦 Детали по ботам"):
         df_bots = df[df["Тип аккаунта"] == "бот"]
@@ -477,8 +488,9 @@ if uploaded:
     from io import BytesIO
     if st.sidebar.button("Скачать результат"):
         buffer = BytesIO()
-        df_plot.to_excel(buffer, index=False)
-        st.download_button("📥 Скачать Excel", buffer.getvalue(), file_name="vk_analysis.xlsx")
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df_plot.to_excel(writer, index=False)
+        st.download_button("📥 Скачать Excel", data=buffer.getvalue(), file_name="vk_analysis.xlsx")
 
 else:
     st.info("Загрузите VK таблицу через левую панель.")
