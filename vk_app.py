@@ -7,8 +7,25 @@ from collections import Counter
 st.set_page_config(page_title="VK Анализ", layout="wide")
 st.title("🧠 VK Анализ: Определение ботов и сегментов")
 
-uploaded = st.sidebar.file_uploader("Загрузите таблицу VK (CSV или XLSX)", type=["csv","xlsx"])
 if uploaded:
+    df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
+
+    df['ВИЗИТ В ВК'] = pd.to_datetime(df['ВИЗИТ В ВК'], errors='coerce')
+    first_q = df['group_count'].quantile(0.25)
+    bot_thr = df['group_count'].mean() + 2 * df['group_count'].std()
+    max_date = df['ВИЗИТ В ВК'].max()
+    days_since = (max_date - df['ВИЗИТ В ВК']).dt.days
+    df['Тип аккаунта'] = 'пользователь'
+    df.loc[(df['group_count']<=first_q) | ((df['group_count']>bot_thr)&(days_since>180)) | (days_since>360), 'Тип аккаунта'] = 'бот'
+
+    # --- определение сегмента
+    theme_cols = [c for c in df.columns if re.match(r"group_\d+_activity$", c)]
+    df['segment'] = df.apply(
+        lambda row: define_segment([{"theme": str(row[c]).lower().strip()} for c in theme_cols if pd.notna(row[c]) and str(row[c]).strip()]),
+        axis=1
+    )
+
+    # --- фильтры
     account_filter = st.radio("Кого показывать:", ["Всех", "Только пользователей", "Только ботов"])
     if account_filter == "Только пользователей":
         df = df[df["Тип аккаунта"] == "пользователь"]
@@ -19,15 +36,6 @@ if uploaded:
     selected_segment = st.selectbox("Фильтр по сегменту:", segment_options)
     if selected_segment != "Все":
         df = df[df["segment"] == selected_segment]
-    
-    df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
-    df['ВИЗИТ В ВК'] = pd.to_datetime(df['ВИЗИТ В ВК'], errors='coerce')
-    first_q = df['group_count'].quantile(0.25)
-    bot_thr = df['group_count'].mean() + 2 * df['group_count'].std()
-    max_date = df['ВИЗИТ В ВК'].max()
-    days_since = (max_date - df['ВИЗИТ В ВК']).dt.days
-    df['Тип аккаунта'] = 'пользователь'
-    df.loc[(df['group_count']<=first_q) | ((df['group_count']>bot_thr)&(days_since>180)) | (days_since>360), 'Тип аккаунта'] = 'бот'
 
     VK_THEME2SEGMENT = {
     "dj": "Музыка",
