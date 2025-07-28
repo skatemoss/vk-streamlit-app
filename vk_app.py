@@ -461,15 +461,18 @@ if uploaded:
     # считаем сегменты
     st.subheader("Распределение сегментов")
     segment_counts = df_plot['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
+
+    top_n = 10
+    top_segments = segment_counts.head(top_n).reset_index()
+    top_segments.columns = ['segment', 'count']  # обязательно
+
     fig = px.bar(
-        segment_counts.head(10).reset_index(),
-        x='index',
-        y='segment',
-        labels={'index': 'Сегмент', 'segment': 'Количество'},
-        title="Топ-10 сегментов",
+        top_segments,
+        x='segment',
+        y='count',
+        title=f"Топ-{top_n} сегментов",
         height=500
     )
-    fig.update_layout(xaxis_tickangle=-45)
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("📦 Детали по ботам"):
