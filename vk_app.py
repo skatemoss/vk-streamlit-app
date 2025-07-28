@@ -464,12 +464,14 @@ if uploaded:
 
     top_n = 10
     top_segments = segment_counts.head(top_n).reset_index()
-    top_segments.columns = ['segment', 'count']  # обязательно
+    top_segments.columns = ['segment', 'count']
+    
+    top_n = st.slider("Сколько сегментов показать на графике:", min_value=5, max_value=30, value=10)
 
     fig = px.bar(
-        top_segments,
-        x='segment',
-        y='count',
+        segment_counts.head(top_n).reset_index(names=["Сегмент", "Количество"]),
+        x="Сегмент",
+        y="Количество",
         title=f"Топ-{top_n} сегментов",
         height=500
     )
