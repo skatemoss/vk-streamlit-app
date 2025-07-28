@@ -418,29 +418,29 @@ if uploaded:
     "языки": "Разное",
     }
 
-# --- определение сегмента ---
-def define_segment(groups):
-    if not groups:
-        return np.nan
-    mapped = [
-        VK_THEME2SEGMENT.get(str(g.get("theme", "")).lower().strip())
-        for g in groups if g.get("theme")
-    ]
-    mapped = [m for m in mapped if m]
-    return Counter(mapped).most_common(1)[0][0] if mapped else np.nan
-
-# --- извлекаем колонки с group_X_activity ---
-theme_cols = [c for c in df.columns if re.match(r"group_\d+_activity$", c)]
-
-# --- применяем функцию к каждой строке ---
-df['segment'] = df.apply(
-    lambda row: define_segment([
-        {"theme": str(row[c]).lower().strip()}
-        for c in theme_cols
-        if pd.notna(row[c]) and str(row[c]).strip()
-    ]),
-    axis=1
-)
+    # --- определение сегмента ---
+    def define_segment(groups):
+        if not groups:
+            return np.nan
+        mapped = [
+            VK_THEME2SEGMENT.get(str(g.get("theme", "")).lower().strip())
+            for g in groups if g.get("theme")
+        ]
+        mapped = [m for m in mapped if m]
+        return Counter(mapped).most_common(1)[0][0] if mapped else np.nan
+    
+    # --- извлекаем колонки с group_X_activity ---
+    theme_cols = [c for c in df.columns if re.match(r"group_\d+_activity$", c)]
+    
+    # --- применяем функцию к каждой строке ---
+    df['segment'] = df.apply(
+        lambda row: define_segment([
+            {"theme": str(row[c]).lower().strip()}
+            for c in theme_cols
+            if pd.notna(row[c]) and str(row[c]).strip()
+        ]),
+        axis=1
+    )
 
 # --- отображение результата ---
 st.subheader("Результаты")
