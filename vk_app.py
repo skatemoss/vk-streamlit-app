@@ -468,14 +468,18 @@ if uploaded:
     
     top_n = st.slider("Сколько сегментов показать на графике:", min_value=5, max_value=30, value=10)
 
+    df_bar = segment_counts.head(top_n).reset_index()
+    st.write("🔍 Таблица для графика", df_bar)
+    
+    df_bar.columns = ["Сегмент", "Количество"]
+
     fig = px.bar(
-        segment_counts.head(top_n).reset_index().rename(columns={"index": "Сегмент", "segment": "Сегмент", 0: "Количество", "segment_counts": "Количество"}),
+        df_bar,
         x="Сегмент",
         y="Количество",
-        title="Топ сегментов по интересам",
+        title=f"Топ-{top_n} сегментов по интересам",
         height=500
     )
-    
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("📦 Детали по ботам"):
