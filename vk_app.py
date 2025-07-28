@@ -4,44 +4,7 @@ import numpy as np
 import re
 from collections import Counter
 
-# --- Конфигурация страницы и заголовок
-st.set_page_config(page_title="VK Анализ", layout="wide")
-st.title("🧠 VK Анализ: Определение ботов и сегментов")
-
-# --- Блок загрузки файла
-uploaded = st.sidebar.file_uploader("Загрузите таблицу VK (CSV или XLSX)", type=["csv", "xlsx"])
-
-if uploaded:
-    df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
-
-    df['ВИЗИТ В ВК'] = pd.to_datetime(df['ВИЗИТ В ВК'], errors='coerce')
-    first_q = df['group_count'].quantile(0.25)
-    bot_thr = df['group_count'].mean() + 2 * df['group_count'].std()
-    max_date = df['ВИЗИТ В ВК'].max()
-    days_since = (max_date - df['ВИЗИТ В ВК']).dt.days
-    df['Тип аккаунта'] = 'пользователь'
-    df.loc[(df['group_count']<=first_q) | ((df['group_count']>bot_thr)&(days_since>180)) | (days_since>360), 'Тип аккаунта'] = 'бот'
-
-    # --- определение сегмента
-    theme_cols = [c for c in df.columns if re.match(r"group_\d+_activity$", c)]
-    df['segment'] = df.apply(
-        lambda row: define_segment([{"theme": str(row[c]).lower().strip()} for c in theme_cols if pd.notna(row[c]) and str(row[c]).strip()]),
-        axis=1
-    )
-
-    # --- фильтры
-    account_filter = st.radio("Кого показывать:", ["Всех", "Только пользователей", "Только ботов"])
-    if account_filter == "Только пользователей":
-        df = df[df["Тип аккаунта"] == "пользователь"]
-    elif account_filter == "Только ботов":
-        df = df[df["Тип аккаунта"] == "бот"]
-
-    segment_options = ["Все"] + sorted(df['segment'].dropna().unique())
-    selected_segment = st.selectbox("Фильтр по сегменту:", segment_options)
-    if selected_segment != "Все":
-        df = df[df["segment"] == selected_segment]
-
-    VK_THEME2SEGMENT = {
+VK_THEME2SEGMENT = {
     "dj": "Музыка",
     "r&b": "Музыка",
     "rap, hip-hop": "Музыка",
@@ -418,19 +381,53 @@ if uploaded:
     "языки": "Разное",
     }
 
-    # --- определение сегмента ---
-    def define_segment(groups):
-        if not groups:
-            return np.nan
-        mapped = [
-            VK_THEME2SEGMENT.get(str(g.get("theme", "")).lower().strip())
-            for g in groups if g.get("theme")
-        ]
-        mapped = [m for m in mapped if m]
-        return Counter(mapped).most_common(1)[0][0] if mapped else np.nan
-    
-    # --- извлекаем колонки с group_X_activity ---
+# --- Конфигурация страницы и заголовок
+st.set_page_config(page_title="VK Анализ", layout="wide")
+st.title("🧠 VK Анализ: Определение ботов и сегментов")
+
+# --- определение сегмента ---
+def define_segment(groups):
+    if not groups:
+        return np.nan
+    mapped = [
+        VK_THEME2SEGMENT.get(str(g.get("theme", "")).lower().strip())
+        for g in groups if g.get("theme")
+    ]
+    mapped = [m for m in mapped if m]
+    return Counter(mapped).most_common(1)[0][0] if mapped else np.nan
+        
+# --- Блок загрузки файла
+uploaded = st.sidebar.file_uploader("Загрузите таблицу VK (CSV или XLSX)", type=["csv", "xlsx"])
+
+if uploaded:
+    df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
+
+    df['ВИЗИТ В ВК'] = pd.to_datetime(df['ВИЗИТ В ВК'], errors='coerce')
+    first_q = df['group_count'].quantile(0.25)
+    bot_thr = df['group_count'].mean() + 2 * df['group_count'].std()
+    max_date = df['ВИЗИТ В ВК'].max()
+    days_since = (max_date - df['ВИЗИТ В ВК']).dt.days
+    df['Тип аккаунта'] = 'пользователь'
+    df.loc[(df['group_count']<=first_q) | ((df['group_count']>bot_thr)&(days_since>180)) | (days_since>360), 'Тип аккаунта'] = 'бот'
+
+    # --- определение сегмента
     theme_cols = [c for c in df.columns if re.match(r"group_\d+_activity$", c)]
+    df['segment'] = df.apply(
+        lambda row: define_segment([{"theme": str(row[c]).lower().strip()} for c in theme_cols if pd.notna(row[c]) and str(row[c]).strip()]),
+        axis=1
+    )
+
+    # --- фильтры
+    account_filter = st.radio("Кого показывать:", ["Всех", "Только пользователей", "Только ботов"])
+    if account_filter == "Только пользователей":
+        df = df[df["Тип аккаунта"] == "пользователь"]
+    elif account_filter == "Только ботов":
+        df = df[df["Тип аккаунта"] == "бот"]
+
+    segment_options = ["Все"] + sorted(df['segment'].dropna().unique())
+    selected_segment = st.selectbox("Фильтр по сегменту:", segment_options)
+    if selected_segment != "Все":
+        df = df[df["segment"] == selected_segment]
     
     # --- применяем функцию к каждой строке ---
     df['segment'] = df.apply(
