@@ -399,6 +399,13 @@ def define_segment(groups):
 # --- Блок загрузки файла
 uploaded = st.sidebar.file_uploader("Загрузите таблицу VK (CSV или XLSX)", type=["csv", "xlsx"])
 
+st.sidebar.markdown("""
+### ℹ️ О приложении
+- 👥 Определяем ботов по активности и дате визита
+- 🧠 Назначаем сегменты по тематикам сообществ
+- 📊 Визуализируем распределение по интересам
+""")
+
 if uploaded:
     df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
 
@@ -453,12 +460,24 @@ if uploaded:
     st.subheader("Распределение сегментов")
     segment_counts = df_plot['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
     st.bar_chart(segment_counts)
+
+    with st.expander("📦 Детали по ботам"):
+        df_bots = df[df["Тип аккаунта"] == "бот"]
+    
+        st.write("**Среднее число групп у ботов:**", round(df_bots["group_count"].mean(), 1))
+    
+        old_bots = df_bots[df_bots["ВИЗИТ В ВК"] < (max_date - pd.Timedelta(days=360))]
+        st.write("**Доля 'древних' аккаунтов (визит > 360 дней):**", f"{len(old_bots)/len(df_bots)*100:.1f}%")
+    
+        st.write("**Распределение сегментов среди ботов:**")
+        bot_segment_counts = df_bots['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False).head(10)
+        st.bar_chart(bot_segment_counts)
     
     # --- кнопка скачивания ---
     from io import BytesIO
     if st.sidebar.button("Скачать результат"):
         buffer = BytesIO()
-        df.to_excel(buffer, index=False)
+        df_plot.to_excel(buffer, index=False)
         st.download_button("📥 Скачать Excel", buffer.getvalue(), file_name="vk_analysis.xlsx")
 
 else:
