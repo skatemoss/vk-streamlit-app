@@ -395,22 +395,45 @@ if uploaded:
     "языки": "Разное",
     }
 
-    def define_segment(groups):
-        if not groups: return np.nan
-        mapped = [VK_THEME2SEGMENT.get(str(g.get("theme","")).lower().strip()) for g in groups if g.get("theme")]
-        mapped = [m for m in mapped if m]
-        return Counter(mapped).most_common(1)[0][0] if mapped else np.nan
+# --- определение сегмента ---
+def define_segment(groups):
+    if not groups:
+        return np.nan
+    mapped = [
+        VK_THEME2SEGMENT.get(str(g.get("theme", "")).lower().strip())
+        for g in groups if g.get("theme")
+    ]
+    mapped = [m for m in mapped if m]
+    return Counter(mapped).most_common(1)[0][0] if mapped else np.nan
 
-    theme_cols = [c for c in df.columns if re.match(r"group_\\d+_activity$", c)]
-    df['segment'] = df.apply(lambda row: define_segment([{"theme":row[c]} for c in theme_cols if pd.notna(row[c])]), axis=1)
+# --- извлекаем колонки с group_X_activity ---
+theme_cols = [c for c in df.columns if re.match(r"group_\d+_activity$", c)]
 
-    st.subheader("Результаты")
-    st.dataframe(df.head())
-    st.subheader("Распределение сегментов")
-    st.bar_chart(df['segment'].value_counts())
+# --- применяем функцию к каждой строке ---
+df['segment'] = df.apply(
+    lambda row: define_segment([
+        {"theme": str(row[c]).lower().strip()}
+        for c in theme_cols
+        if pd.notna(row[c]) and str(row[c]).strip()
+    ]),
+    axis=1
+)
 
-    if st.sidebar.button("Скачать результат"):
-        st.download_button("Скачать Excel", df.to_excel(index=False), file_name="vk_analysis.xlsx")
+# --- отображение результата ---
+st.subheader("Результаты")
+st.dataframe(df.head())
+
+# --- визуализация распределения сегментов ---
+st.subheader("Распределение сегментов")
+segment_counts = df['segment'].fillna("не определено").value_counts()
+st.bar_chart(segment_counts)
+
+# --- кнопка скачивания ---
+if st.sidebar.button("Скачать результат"):
+    from io import BytesIO
+    buffer = BytesIO()
+    df.to_excel(buffer, index=False)
+    st.download_button("📥 Скачать Excel", buffer.getvalue(), file_name="vk_analysis.xlsx")
 
 else:
     st.info("Загрузите VK таблицу через левую панель.")
