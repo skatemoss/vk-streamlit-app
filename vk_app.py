@@ -9,6 +9,17 @@ st.title("🧠 VK Анализ: Определение ботов и сегме�
 
 uploaded = st.sidebar.file_uploader("Загрузите таблицу VK (CSV или XLSX)", type=["csv","xlsx"])
 if uploaded:
+    account_filter = st.radio("Кого показывать:", ["Всех", "Только пользователей", "Только ботов"])
+    if account_filter == "Только пользователей":
+        df = df[df["Тип аккаунта"] == "пользователь"]
+    elif account_filter == "Только ботов":
+        df = df[df["Тип аккаунта"] == "бот"]
+
+    segment_options = ["Все"] + sorted(df['segment'].dropna().unique())
+    selected_segment = st.selectbox("Фильтр по сегменту:", segment_options)
+    if selected_segment != "Все":
+        df = df[df["segment"] == selected_segment]
+    
     df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
     df['ВИЗИТ В ВК'] = pd.to_datetime(df['ВИЗИТ В ВК'], errors='coerce')
     first_q = df['group_count'].quantile(0.25)
@@ -421,16 +432,24 @@ df['segment'] = df.apply(
 
 # --- отображение результата ---
 st.subheader("Результаты")
-st.dataframe(df.head())
+col1, col2, col3 = st.columns(3)
+col1.metric("Всего аккаунтов", len(df))
+col2.metric("Боты", (df["Тип аккаунта"] == "бот").sum())
+col3.metric("Пользователи", (df["Тип аккаунта"] == "пользователь").sum())
+st.dataframe(df, use_container_width=True, height=600)
 
 # --- визуализация распределения сегментов ---
 st.subheader("Распределение сегментов")
-segment_counts = df['segment'].fillna("не определено").value_counts()
+
+# опционально: фильтруем только пользователей
+df = df[df['Тип аккаунта'] == 'пользователь']
+
+segment_counts = df['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
 st.bar_chart(segment_counts)
 
 # --- кнопка скачивания ---
+from io import BytesIO
 if st.sidebar.button("Скачать результат"):
-    from io import BytesIO
     buffer = BytesIO()
     df.to_excel(buffer, index=False)
     st.download_button("📥 Скачать Excel", buffer.getvalue(), file_name="vk_analysis.xlsx")
