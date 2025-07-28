@@ -4,8 +4,12 @@ import numpy as np
 import re
 from collections import Counter
 
+# --- Конфигурация страницы и заголовок
 st.set_page_config(page_title="VK Анализ", layout="wide")
 st.title("🧠 VK Анализ: Определение ботов и сегментов")
+
+# --- Блок загрузки файла
+uploaded = st.sidebar.file_uploader("Загрузите таблицу VK (CSV или XLSX)", type=["csv", "xlsx"])
 
 if uploaded:
     df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
