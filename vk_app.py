@@ -442,29 +442,29 @@ if uploaded:
         axis=1
     )
 
-# --- отображение результата ---
-st.subheader("Результаты")
-col1, col2, col3 = st.columns(3)
-col1.metric("Всего аккаунтов", len(df))
-col2.metric("Боты", (df["Тип аккаунта"] == "бот").sum())
-col3.metric("Пользователи", (df["Тип аккаунта"] == "пользователь").sum())
-st.dataframe(df, use_container_width=True, height=600)
-
-# --- визуализация распределения сегментов ---
-st.subheader("Распределение сегментов")
-
-# опционально: фильтруем только пользователей
-df = df[df['Тип аккаунта'] == 'пользователь']
-
-segment_counts = df['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
-st.bar_chart(segment_counts)
-
-# --- кнопка скачивания ---
-from io import BytesIO
-if st.sidebar.button("Скачать результат"):
-    buffer = BytesIO()
-    df.to_excel(buffer, index=False)
-    st.download_button("📥 Скачать Excel", buffer.getvalue(), file_name="vk_analysis.xlsx")
+    # --- отображение результата ---
+    st.subheader("Результаты")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Всего аккаунтов", len(df))
+    col2.metric("Боты", (df["Тип аккаунта"] == "бот").sum())
+    col3.metric("Пользователи", (df["Тип аккаунта"] == "пользователь").sum())
+    st.dataframe(df, use_container_width=True, height=600)
+    
+    # --- визуализация распределения сегментов ---
+    st.subheader("Распределение сегментов")
+    
+    # опционально: фильтруем только пользователей
+    df = df[df['Тип аккаунта'] == 'пользователь']
+    
+    segment_counts = df['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
+    st.bar_chart(segment_counts)
+    
+    # --- кнопка скачивания ---
+    from io import BytesIO
+    if st.sidebar.button("Скачать результат"):
+        buffer = BytesIO()
+        df.to_excel(buffer, index=False)
+        st.download_button("📥 Скачать Excel", buffer.getvalue(), file_name="vk_analysis.xlsx")
 
 else:
     st.info("Загрузите VK таблицу через левую панель.")
