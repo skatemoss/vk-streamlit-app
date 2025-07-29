@@ -431,19 +431,6 @@ if uploaded:
 
         with st.spinner("🚀 Сбор данных из VK..."):
             for idx, chunk in enumerate(users_chunks):
-                percent_complete = (idx + 1) / len(users_chunks)
-                progress_bar.progress(percent_complete)
-
-                elapsed = time.time() - time_start
-                avg_time = elapsed / (idx + 1)
-                remaining_time = avg_time * (len(users_chunks) - (idx + 1))
-                mins, secs = divmod(int(remaining_time), 60)
-
-                status_text.text(
-                    f"🔄 Обрабатываем пользователей {idx*100+1}–{idx*100+len(chunk)} | ⏳ Осталось ≈ {mins} мин {secs} сек"
-                )
-                error_counter.text(f"❌ Ошибок: {len(errors)}")
-
                 try:
                     resp = requests.get(BASE_URL + 'users.get', params={
                         'user_ids': ','.join(map(str, chunk)),
@@ -451,61 +438,74 @@ if uploaded:
                         'access_token': vk_token,
                         'v': API_VERSION
                     }).json()
-
+        
                     for user in resp.get("response", []):
-                        row = {
-                            "VK ID": user.get("id"),
-                            "first_name": user.get("first_name"),
-                            "last_name": user.get("last_name"),
-                            "activities": user.get("activities"),
-                            "bdate": user.get("bdate"),
-                            "city": user.get("city", {}).get("title") if isinstance(user.get("city"), dict) else None,
-                            "country": user.get("country", {}).get("title") if isinstance(user.get("country"), dict) else None,
-                            "university_name": user.get("education", {}).get("university_name") if isinstance(user.get("education"), dict) else None,
-                            "faculty_name": user.get("education", {}).get("faculty_name") if isinstance(user.get("education"), dict) else None,
-                            "last_seen_time": user.get("last_seen", {}).get("time") if isinstance(user.get("last_seen"), dict) else None,
-                            "occupation_type": user.get("occupation", {}).get("type") if isinstance(user.get("occupation"), dict) else None,
-                            "sex": user.get("sex"),
-                            "faculty_from_universities": user.get("universities", [{}])[0].get("faculty_name") if isinstance(user.get("universities"), list) else None,
-                        }
-
-                        group_resp = requests.get(BASE_URL + 'groups.get', params={
-                            'user_id': user.get("id"),
-                            'access_token': vk_token,
-                            'v': API_VERSION,
-                            'extended': 1,
-                            'fields': 'activity',
-                            'count': 1000
-                        }).json()
-
-                        if "response" in group_resp:
-                            groups = group_resp["response"]["items"]
-                            row["group_count"] = len(groups)
-                            for j, group in enumerate(groups[:50], start=1):
-                                row[f"group_{j}_name"] = group.get("name", "")
-                                row[f"group_{j}_activity"] = group.get("activity", "")
-                        elif "error" in group_resp:
-                            msg = f"VK API ошибка (groups.get) user_id={user.get('id')}: {group_resp['error']}"
+                        try:
+                            row = {
+                                "VK ID": user.get("id"),
+                                "first_name": user.get("first_name"),
+                                "last_name": user.get("last_name"),
+                                "activities": user.get("activities"),
+                                "bdate": user.get("bdate"),
+                                "city": user.get("city", {}).get("title") if isinstance(user.get("city"), dict) else None,
+                                "country": user.get("country", {}).get("title") if isinstance(user.get("country"), dict) else None,
+                                "university_name": user.get("education", {}).get("university_name") if isinstance(user.get("education"), dict) else None,
+                                "faculty_name": user.get("education", {}).get("faculty_name") if isinstance(user.get("education"), dict) else None,
+                                "last_seen_time": user.get("last_seen", {}).get("time") if isinstance(user.get("last_seen"), dict) else None,
+                                "occupation_type": user.get("occupation", {}).get("type") if isinstance(user.get("occupation"), dict) else None,
+                                "sex": user.get("sex"),
+                                "faculty_from_universities": (
+                                    user.get("universities", [{}])[0].get("faculty_name")
+                                    if user.get("universities") and isinstance(user["universities"], list) and len(user["universities"]) > 0
+                                    else None
+                                ),
+                            }
+        
+                            group_resp = requests.get(BASE_URL + 'groups.get', params={
+                                'user_id': user.get("id"),
+                                'access_token': vk_token,
+                                'v': API_VERSION,
+                                'extended': 1,
+                                'fields': 'activity',
+                                'count': 1000
+                            }).json()
+        
+                            if "response" in group_resp:
+                                groups = group_resp["response"]["items"]
+                                row["group_count"] = len(groups)
+                                for j, group in enumerate(groups[:50], start=1):
+                                    row[f"group_{j}_name"] = group.get("name", "")
+                                    row[f"group_{j}_activity"] = group.get("activity", "")
+                            elif "error" in group_resp:
+                                msg = f"VK API ошибка (groups.get) user_id={user.get('id')}: {group_resp['error']}"
+                                errors.append(msg)
+                                st.warning(msg)
+        
+                            results.append(row)
+                            time.sleep(0.5)
+        
+                        except Exception as e:
+                            msg = f"❌ Ошибка при обработке user_id={user.get('id')}: {e}"
                             errors.append(msg)
-                            st.warning(msg)
-
-                        results.append(row)
-                        time.sleep(0.5)
-
+                            st.error(msg)
+                            continue
+        
                 except Exception as e:
                     msg = f"❌ Ошибка при запросе users.get: {e}"
                     errors.append(msg)
                     st.error(msg)
-                    continue
-
-        df = pd.DataFrame(results)
-        st.session_state["df"] = df
-        st.success(f"✅ Данные собраны! Всего строк: {len(df)}")
-
-        if errors:
-            with st.expander("📛 Ошибки при сборе данных"):
-                for err in errors:
-                    st.write(err)
+        
+                # 🔁 Обновление статуса и прогресса
+                percent_complete = (idx + 1) / len(users_chunks)
+                progress_bar.progress(percent_complete)
+        
+                elapsed = time.time() - time_start
+                avg_time = elapsed / (idx + 1)
+                remaining_time = avg_time * (len(users_chunks) - (idx + 1))
+                mins, secs = divmod(int(remaining_time), 60)
+        
+                status_text.text(f"🔄 Обрабатываем пользователей {idx*100+1}–{idx*100+len(chunk)} | ⏳ Осталось ≈ {mins} мин {secs} сек")
+                error_counter.text(f"❌ Ошибок: {len(errors)}")
 
 if "df" in st.session_state:
     df = st.session_state["df"]
