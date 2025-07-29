@@ -442,6 +442,21 @@ if uploaded:
     
     df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
 
+    if "vk_data" in st.session_state:
+        vk_data = st.session_state["vk_data"]
+        id_col = [col for col in df.columns if "id" in col.lower()][0]
+        df = df.merge(vk_data, left_on=id_col, right_on="id", how="left")
+    
+        df["last_seen_datetime"] = pd.to_datetime(
+            df["last_seen"].apply(lambda x: x.get("time") if isinstance(x, dict) else None),
+            unit="s"
+        )
+        df["university_name"] = df["education"].apply(lambda x: x.get("university_name") if isinstance(x, dict) else None)
+        df["faculty_name"] = df["education"].apply(lambda x: x.get("faculty_name") if isinstance(x, dict) else None)
+        df["faculty_from_universities"] = df["universities"].apply(
+            lambda x: x[0]["faculty_name"] if isinstance(x, list) and x and "faculty_name" in x[0] else None
+        )
+
     df['ВИЗИТ В ВК'] = pd.to_datetime(df['ВИЗИТ В ВК'], errors='coerce')
     first_q = df['group_count'].quantile(0.25)
     bot_thr = df['group_count'].mean() + 2 * df['group_count'].std()
@@ -474,21 +489,6 @@ if uploaded:
     selected_segment = st.selectbox("Фильтр по сегменту:", segment_options)
     if selected_segment != "Все":
         df = df[df["segment"] == selected_segment]
-        
-    if "vk_data" in st.session_state:
-    vk_data = st.session_state["vk_data"]
-    id_col = [col for col in df.columns if "id" in col.lower()][0]
-    df = df.merge(vk_data, left_on=id_col, right_on="id", how="left")
-
-    df["last_seen_datetime"] = pd.to_datetime(
-        df["last_seen"].apply(lambda x: x.get("time") if isinstance(x, dict) else None),
-        unit="s"
-    )
-    df["university_name"] = df["education"].apply(lambda x: x.get("university_name") if isinstance(x, dict) else None)
-    df["faculty_name"] = df["education"].apply(lambda x: x.get("faculty_name") if isinstance(x, dict) else None)
-    df["faculty_from_universities"] = df["universities"].apply(
-        lambda x: x[0]["faculty_name"] if isinstance(x, list) and x and "faculty_name" in x[0] else None
-    )
 
     # --- отображение результата ---
     st.subheader("Результаты")
