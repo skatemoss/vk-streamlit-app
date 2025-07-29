@@ -413,7 +413,7 @@ st.sidebar.markdown("""
 
 if uploaded:
     df = pd.read_csv(uploaded)
-    id_col = "user_id"
+    id_col = "VK ID"
     ids = df[id_col].astype(int).tolist()
 
     vk_token = st.sidebar.text_input("Введите VK API токен", type="password")
