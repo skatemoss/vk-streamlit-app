@@ -426,8 +426,9 @@ if uploaded:
                 
                 # 🔍 покажем весь ответ от VK API
                 st.write("📦 Ответ от VK API (users.get):", resp)
-
-
+                
+                for user in resp.get("response", []):
+                    st.write(user)  # 🔍 покажем отдельного пользователя
                     row = {
                         "VK ID": user.get("id"),
                         "first_name": user.get("first_name"),
