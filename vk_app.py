@@ -1,12 +1,12 @@
 import streamlit as st
-import openpyxl
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import re
-import requests
 import time
+import requests
 from collections import Counter
+import plotly.express as px
+from io import BytesIO
 
 VK_THEME2SEGMENT = {
     "dj": "Музыка",
@@ -406,36 +406,34 @@ uploaded = st.sidebar.file_uploader("Загрузите CSV с user_id", type=["
 st.sidebar.markdown("""
 ### ℹ️ О приложении
 - 🔑 Введите VK API токен
-- 📥 Загружаем ID пользователей
-- 🤖 Сбор данных через API: `users.get`, `groups.get`
-- 📊 Анализируем ботов и интересы
+- 📅 Загружаем ID пользователей
+- 🤖 Сбор данных: users.get, groups.get
+- 📊 Анализ ботов и сегментов
 """)
 
 if uploaded:
-    df = pd.read_csv(uploaded)
-    id_col = "VK ID"
-    ids = df[id_col].astype(int).tolist()
-
+    ids = pd.read_csv(uploaded)["VK ID"].astype(int).tolist()
     vk_token = st.sidebar.text_input("Введите VK API токен", type="password")
-    if vk_token and st.sidebar.button("Собрать данные из VK API"):
-        import requests, time
 
+    if vk_token and st.sidebar.button("Собрать данные из VK API"):
         BASE_URL = 'https://api.vk.com/method/'
         API_VERSION = '5.199'
         results = []
-        users_chunks = [ids[i:i+100] for i in range(0, len(ids), 100)]
 
-        for idx, chunk in enumerate(users_chunks):
-            st.write(f"🔄 Обрабатываем пользователей {idx*100+1}-{idx*100+len(chunk)}")
-            users_resp = requests.get(BASE_URL + 'users.get', params={
+        for i in range(0, len(ids), 100):
+            chunk = ids[i:i+100]
+            st.write(f"🔄 Обработка {i+1}-{i+len(chunk)}")
+
+            resp = requests.get(BASE_URL + 'users.get', params={
                 'user_ids': ','.join(map(str, chunk)),
                 'fields': 'activities,bdate,city,country,education,last_seen,occupation,sex,universities',
                 'access_token': vk_token,
                 'v': API_VERSION
             }).json()
 
-            for user in users_resp.get("response", []):
+            for user in resp.get("response", []):
                 user_result = {
+                    "VK ID": user.get("id"),
                     "first_name": user.get("first_name"),
                     "last_name": user.get("last_name"),
                     "activities": user.get("activities"),
@@ -449,42 +447,35 @@ if uploaded:
                     "sex": user.get("sex"),
                     "faculty_from_universities": user.get("universities", [{}])[0].get("faculty_name") if isinstance(user.get("universities"), list) else None,
                 }
-                user_result["VK ID"] = user.get("id")
 
-                # --- groups.get запрос ---
                 try:
-                    resp = requests.get(BASE_URL + 'groups.get', params={
+                    gresp = requests.get(BASE_URL + 'groups.get', params={
                         'user_id': user.get("id"),
                         'access_token': vk_token,
                         'v': API_VERSION,
                         'extended': 1,
                         'fields': 'activity',
                         'count': 1000
-                    })
-                    groups_data = resp.json()
-                    if "response" in groups_data:
-                        groups = groups_data["response"]["items"]
+                    }).json()
+
+                    if "response" in gresp:
+                        groups = gresp["response"].get("items", [])
                         user_result["group_count"] = len(groups)
                         for j, group in enumerate(groups[:50], start=1):
-                            user_result[f"group_{j}_name"] = group.get("name", "")
-                            user_result[f"group_{j}_activity"] = group.get("activity", "")
-                    elif "error" in groups_data:
-                        st.warning(f"Ошибка VK API: {groups_data['error']}")
-                except Exception as e:
-                    st.error(f"Ошибка при запросе groups.get: {e}")
+                            user_result[f"group_{j}_name"] = group.get("name")
+                            user_result[f"group_{j}_activity"] = group.get("activity")
+                except:
+                    pass
 
                 results.append(user_result)
                 time.sleep(0.5)
 
-        df_vk = pd.DataFrame(results)
-        df = df.merge(df_vk, on="VK ID", how="left")
+        df = pd.DataFrame(results)
         st.session_state["df"] = df
-        st.success("✅ Данные собраны и объединены!")
+        st.success("✅ Данные собраны!")
 
 if "df" in st.session_state:
     df = st.session_state["df"]
-
-    # --- метка "бот" ---
     df["ВИЗИТ В ВК"] = pd.to_datetime(df["last_seen_time"], unit="s", errors='coerce')
     first_q = df["group_count"].quantile(0.25)
     bot_thr = df["group_count"].mean() + 2 * df["group_count"].std()
@@ -493,16 +484,18 @@ if "df" in st.session_state:
     df["Тип аккаунта"] = "пользователь"
     df.loc[(df["group_count"]<=first_q) | ((df["group_count"]>bot_thr)&(days_since>180)) | (days_since>360), "Тип аккаунта"] = "бот"
 
-    # --- сегменты ---
     theme_cols = [c for c in df.columns if re.match(r"group_\d+_activity$", c)]
-    df['segment'] = df.apply(
-        lambda row: define_segment([
-            {"theme": str(row[c]).lower().strip()} for c in theme_cols if pd.notna(row[c]) and str(row[c]).strip()
-        ]), axis=1
-    )
+    df['segment'] = df.apply(lambda row: define_segment([
+        {"theme": str(row[c]).lower().strip()} for c in theme_cols if pd.notna(row[c]) and str(row[c]).strip()
+    ]), axis=1)
 
-    # --- фильтры ---
-    account_filter = st.radio("Кого показывать:", ["Всех", "Только пользователей", "Только ботов"])
+    st.subheader("Результаты")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Всего", len(df))
+    col2.metric("Боты", (df["Тип аккаунта"]=="бот").sum())
+    col3.metric("Пользователи", (df["Тип аккаунта"]=="пользователь").sum())
+
+    account_filter = st.radio("Кого показывать", ["Все", "Только пользователей", "Только ботов"])
     df_plot = df.copy()
     if account_filter == "Только пользователей":
         df_plot = df_plot[df_plot["Тип аккаунта"] == "пользователь"]
@@ -510,24 +503,18 @@ if "df" in st.session_state:
         df_plot = df_plot[df_plot["Тип аккаунта"] == "бот"]
 
     segment_options = ["Все"] + sorted(df_plot['segment'].dropna().unique())
-    selected_segment = st.selectbox("Фильтр по сегменту:", segment_options)
+    selected_segment = st.selectbox("Фильтр по сегменту", segment_options)
     if selected_segment != "Все":
         df_plot = df_plot[df_plot["segment"] == selected_segment]
 
-    # --- вывод ---
-    st.subheader("Результаты")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Всего аккаунтов", len(df))
-    col2.metric("Боты", (df["Тип аккаунта"] == "бот").sum())
-    col3.metric("Пользователи", (df["Тип аккаунта"] == "пользователь").sum())
     st.dataframe(df_plot, use_container_width=True, height=600)
 
     st.subheader("Распределение сегментов")
-    show_users_only = st.checkbox("Только пользователи в графике", value=True)
+    show_users_only = st.checkbox("Только пользователи", value=True)
     df_graph = df_plot[df_plot["Тип аккаунта"] == "пользователь"] if show_users_only else df_plot
 
     segment_counts = df_graph['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
-    top_n = st.slider("Сколько сегментов показать на графике:", 5, 30, 10)
+    top_n = st.slider("Сколько сегментов показать", 5, 30, 10)
     df_bar = segment_counts.head(top_n).reset_index()
     df_bar.columns = ["Сегмент", "Количество"]
     fig = px.bar(df_bar, x="Сегмент", y="Количество", title=f"Топ-{top_n} сегментов", height=500)
@@ -541,11 +528,9 @@ if "df" in st.session_state:
         st.bar_chart(bot_segments)
         st.dataframe(bots)
 
-    # --- кнопка скачивания ---
-    from io import BytesIO
     if st.sidebar.button("Скачать результат"):
         buffer = BytesIO()
         df_plot.to_excel(buffer, index=False)
-        st.download_button("📥 Скачать Excel", buffer.getvalue(), file_name="vk_analysis.xlsx")
+        st.download_button("📅 Скачать Excel", buffer.getvalue(), file_name="vk_analysis.xlsx")
 else:
     st.info("Загрузите CSV с ID пользователей.")
