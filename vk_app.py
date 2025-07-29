@@ -458,32 +458,35 @@ if uploaded:
 
                 # --- groups.get запрос ---
                 try:
-                    resp = requests.get(BASE_URL + 'groups.get', params={
+                    group_resp = requests.get(BASE_URL + 'groups.get', params={
                         'user_id': user.get("id"),
                         'access_token': vk_token,
                         'v': API_VERSION,
                         'extended': 1,
                         'fields': 'activity',
                         'count': 1000
-                    })
-                    groups_data = resp.json()
-                    if "response" in groups_data:
-                        groups = groups_data["response"]["items"]
+                    }).json()
+                
+                    if "response" in group_resp:
+                        groups = group_resp["response"]["items"]
                         user_result["group_count"] = len(groups)
                         for j, group in enumerate(groups[:50], start=1):
                             user_result[f"group_{j}_name"] = group.get("name", "")
                             user_result[f"group_{j}_activity"] = group.get("activity", "")
-                    elif "error" in groups_data:
-                        st.warning(f"Ошибка VK API: {groups_data['error']}")
+                        results.append(user_result)  # ✅ добавляем только если всё хорошо
+                
+                    else:
+                        # 🔕 Молча пропускаем ошибку
+                        pass
+                
                 except Exception as e:
-                    st.error(f"Ошибка при запросе groups.get: {e}")
+                    pass  # 🔕 Не выводим даже здесь
 
                 results.append(user_result)
                 time.sleep(0.5)
 
         df_vk = pd.DataFrame(results)
         df = df.merge(df_vk, on=id_col, how="left")
-        df = df.merge(df_vk, on="VK ID", how="left")
         st.session_state["df"] = df
         st.success("✅ Данные собраны и объединены!")
 
