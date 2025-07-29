@@ -423,9 +423,10 @@ if uploaded:
                     'access_token': vk_token,
                     'v': API_VERSION
                 }).json()
+                
+                # 🔍 покажем весь ответ от VK API
+                st.write("📦 Ответ от VK API (users.get):", resp)
 
-                for user in resp.get("response", []):
-                    st.write(user)  # 🔍 отладка: покажем, что реально приходит от VK API
 
                     row = {
                         "VK ID": user.get("id"),
