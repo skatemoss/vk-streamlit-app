@@ -477,7 +477,7 @@ if uploaded:
                 time.sleep(0.5)
 
         df_vk = pd.DataFrame(results)
-        df = df.merge(df_vk, on="user_id", how="left")
+        df = df.merge(df_vk, on=id_col, how="left")
         st.session_state["df"] = df
         st.success("✅ Данные собраны и объединены!")
 
