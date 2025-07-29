@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import re
+import requests
+import time
 from collections import Counter
 
 VK_THEME2SEGMENT = {
@@ -409,6 +411,35 @@ st.sidebar.markdown("""
 """)
 
 if uploaded:
+    vk_token = st.sidebar.text_input("Введите VK API токен", type="password")
+    if vk_token and st.sidebar.button("Собрать данные с VK API"):
+        st.info("Запрашиваем данные у VK...")
+    
+        def get_vk_user_data(user_ids, token):
+            import requests
+            ids_str = ",".join(str(uid) for uid in user_ids)
+            url = "https://api.vk.com/method/users.get"
+            params = {
+                "user_ids": ids_str,
+                "fields": ",".join([
+                    "activities", "bdate", "city", "country",
+                    "education", "last_seen", "occupation",
+                    "sex", "universities"
+                ]),
+                "access_token": token,
+                "v": "5.199"
+            }
+            resp = requests.get(url, params=params).json()
+            return pd.json_normalize(resp.get("response", []))
+    
+        # определяем колонку с ID
+        id_col = [col for col in df.columns if "id" in col.lower()][0]
+        user_ids = df[id_col].dropna().astype(int).tolist()
+        
+        vk_data = get_vk_user_data(user_ids[:1000], vk_token)  # ограничение VK API
+        st.session_state["vk_data"] = vk_data
+        st.success("Данные собраны!")
+    
     df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
 
     df['ВИЗИТ В ВК'] = pd.to_datetime(df['ВИЗИТ В ВК'], errors='coerce')
@@ -443,6 +474,21 @@ if uploaded:
     selected_segment = st.selectbox("Фильтр по сегменту:", segment_options)
     if selected_segment != "Все":
         df = df[df["segment"] == selected_segment]
+        
+    if "vk_data" in st.session_state:
+    vk_data = st.session_state["vk_data"]
+    id_col = [col for col in df.columns if "id" in col.lower()][0]
+    df = df.merge(vk_data, left_on=id_col, right_on="id", how="left")
+
+    df["last_seen_datetime"] = pd.to_datetime(
+        df["last_seen"].apply(lambda x: x.get("time") if isinstance(x, dict) else None),
+        unit="s"
+    )
+    df["university_name"] = df["education"].apply(lambda x: x.get("university_name") if isinstance(x, dict) else None)
+    df["faculty_name"] = df["education"].apply(lambda x: x.get("faculty_name") if isinstance(x, dict) else None)
+    df["faculty_from_universities"] = df["universities"].apply(
+        lambda x: x[0]["faculty_name"] if isinstance(x, list) and x and "faculty_name" in x[0] else None
+    )
 
     # --- отображение результата ---
     st.subheader("Результаты")
