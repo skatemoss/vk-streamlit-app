@@ -421,29 +421,29 @@ if uploaded:
         BASE_URL = 'https://api.vk.com/method/'
         API_VERSION = '5.199'
         results = []
+        errors = []
         users_chunks = [ids[i:i+100] for i in range(0, len(ids), 100)]
 
         progress_bar = st.progress(0)
         status_text = st.empty()
         error_counter = st.empty()
         time_start = time.time()
-    
+
         with st.spinner("🚀 Сбор данных из VK..."):
-            for idx, chunk in enumerate(chunks):
-                percent_complete = (idx + 1) / len(chunks)
+            for idx, chunk in enumerate(users_chunks):
+                percent_complete = (idx + 1) / len(users_chunks)
                 progress_bar.progress(percent_complete)
-    
-                # оценка оставшегося времени
+
                 elapsed = time.time() - time_start
                 avg_time = elapsed / (idx + 1)
-                remaining_time = avg_time * (len(chunks) - (idx + 1))
+                remaining_time = avg_time * (len(users_chunks) - (idx + 1))
                 mins, secs = divmod(int(remaining_time), 60)
-    
+
                 status_text.text(
                     f"🔄 Обрабатываем пользователей {idx*100+1}–{idx*100+len(chunk)} | ⏳ Осталось ≈ {mins} мин {secs} сек"
                 )
                 error_counter.text(f"❌ Ошибок: {len(errors)}")
-    
+
                 try:
                     resp = requests.get(BASE_URL + 'users.get', params={
                         'user_ids': ','.join(map(str, chunk)),
@@ -451,7 +451,7 @@ if uploaded:
                         'access_token': vk_token,
                         'v': API_VERSION
                     }).json()
-    
+
                     for user in resp.get("response", []):
                         row = {
                             "VK ID": user.get("id"),
@@ -468,7 +468,7 @@ if uploaded:
                             "sex": user.get("sex"),
                             "faculty_from_universities": user.get("universities", [{}])[0].get("faculty_name") if isinstance(user.get("universities"), list) else None,
                         }
-    
+
                         group_resp = requests.get(BASE_URL + 'groups.get', params={
                             'user_id': user.get("id"),
                             'access_token': vk_token,
@@ -477,7 +477,7 @@ if uploaded:
                             'fields': 'activity',
                             'count': 1000
                         }).json()
-    
+
                         if "response" in group_resp:
                             groups = group_resp["response"]["items"]
                             row["group_count"] = len(groups)
@@ -488,24 +488,24 @@ if uploaded:
                             msg = f"VK API ошибка (groups.get) user_id={user.get('id')}: {group_resp['error']}"
                             errors.append(msg)
                             st.warning(msg)
-    
+
                         results.append(row)
                         time.sleep(0.5)
-    
+
                 except Exception as e:
                     msg = f"❌ Ошибка при запросе users.get: {e}"
                     errors.append(msg)
                     st.error(msg)
                     continue
 
-    df = pd.DataFrame(results)
-    st.session_state["df"] = df
-    st.success(f"✅ Данные собраны! Всего строк: {len(df)}")
+        df = pd.DataFrame(results)
+        st.session_state["df"] = df
+        st.success(f"✅ Данные собраны! Всего строк: {len(df)}")
 
-    if errors:
-        with st.expander("📛 Ошибки при сборе данных"):
-            for err in errors:
-                st.write(err)
+        if errors:
+            with st.expander("📛 Ошибки при сборе данных"):
+                for err in errors:
+                    st.write(err)
 
 if "df" in st.session_state:
     df = st.session_state["df"]
