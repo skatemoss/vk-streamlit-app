@@ -405,10 +405,12 @@ uploaded = st.sidebar.file_uploader("Загрузите CSV с user_id", type=["
 
 st.sidebar.markdown("""
 ### ℹ️ О приложении
-- Загружаем ID пользователей
-- Введите VK API токен
-- Сбор данных через API: `users.get`, `groups.get`
 - Анализируем ботов и интересы
+- Сбор данных происходит через API VK: `users.get`, `groups.get`
+
+Порядок работы
+- 1. Загрузите ID пользователей
+- 2. Введите VK API токен
 """)
 
 if uploaded:
