@@ -413,7 +413,7 @@ st.sidebar.markdown("""
 
 if uploaded:
     df = pd.read_csv(uploaded)
-    id_col = [col for col in df.columns if "id" in col.lower()][0]
+    id_col = "user_id"
     ids = df[id_col].astype(int).tolist()
 
     vk_token = st.sidebar.text_input("Введите VK API токен", type="password")
@@ -436,7 +436,7 @@ if uploaded:
 
             for user in users_resp.get("response", []):
                 user_result = {
-                    id_col: user.get("id"),
+                    "user_id": user.get("id"),
                     "first_name": user.get("first_name"),
                     "last_name": user.get("last_name"),
                     "activities": user.get("activities"),
@@ -477,7 +477,7 @@ if uploaded:
                 time.sleep(0.5)
 
         df_vk = pd.DataFrame(results)
-        df = df.merge(df_vk, on=id_col, how="left")
+        df = df.merge(df_vk, on="user_id", how="left")
         st.session_state["df"] = df
         st.success("✅ Данные собраны и объединены!")
 
