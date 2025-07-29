@@ -449,7 +449,7 @@ if uploaded:
                     "sex": user.get("sex"),
                     "faculty_from_universities": user.get("universities", [{}])[0].get("faculty_name") if isinstance(user.get("universities"), list) else None,
                 }
-                user_result[id_col] = user.get("id")
+                user_result["VK ID"] = user.get("id")
 
                 # --- groups.get запрос ---
                 try:
@@ -477,7 +477,7 @@ if uploaded:
                 time.sleep(0.5)
 
         df_vk = pd.DataFrame(results)
-        df = df.merge(df_vk, on=id_col, how="left")
+        df = df.merge(df_vk, on="VK ID", how="left")
         st.session_state["df"] = df
         st.success("✅ Данные собраны и объединены!")
 
