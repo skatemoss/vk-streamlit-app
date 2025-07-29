@@ -500,8 +500,7 @@ if uploaded:
                 remaining_time = avg_time * (len(users_chunks) - (idx + 1))
                 mins, secs = divmod(int(remaining_time), 60)
 
-                status_text.text(f"🔄 Обрабатываем {idx*100+1}–{idx*100+len(chunk)} | ⏳ Осталось ≈ {mins} мин {secs} сек")
-                error_counter.text(f"❌ Ошибок: {len(errors)}")
+                error_counter.text(f"❌ Количество закрытых профилей: {len(errors)}")
 
         if results:
             df = pd.DataFrame(results)
@@ -512,8 +511,8 @@ if uploaded:
 
         if errors:
             with st.expander("📋 Ошибки при сборе данных"):
-                for err in errors:
-                    st.write(err)
+                st.write("Ошибочные user_id:")
+                st.code("\n".join(map(str, errors)))
 
 if "df" in st.session_state:
     df = st.session_state["df"]
