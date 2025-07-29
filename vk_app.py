@@ -387,7 +387,7 @@ VK_THEME2SEGMENT = {
 
 # --- Конфигурация страницы и заголовок
 st.set_page_config(page_title="VK Анализ", layout="wide")
-st.title("🧠 VK Анализ: Определение ботов и сегментов")
+st.title("🧠 VK Анализ: Сбор и анализ профилей ВКонтакте")
 
 # --- определение сегмента ---
 def define_segment(groups):
@@ -399,154 +399,153 @@ def define_segment(groups):
     ]
     mapped = [m for m in mapped if m]
     return Counter(mapped).most_common(1)[0][0] if mapped else np.nan
-        
-# --- Блок загрузки файла
-uploaded = st.sidebar.file_uploader("Загрузите таблицу VK (CSV или XLSX)", type=["csv", "xlsx"])
+
+# --- Загрузка ID-файла ---
+uploaded = st.sidebar.file_uploader("Загрузите CSV с user_id", type=["csv"])
 
 st.sidebar.markdown("""
 ### ℹ️ О приложении
-- 👥 Определяем ботов по активности и дате визита
-- 🧠 Назначаем сегменты по тематикам сообществ
-- 📊 Визуализируем распределение по интересам
+- 🔑 Введите VK API токен
+- 📥 Загружаем ID пользователей
+- 🤖 Сбор данных через API: `users.get`, `groups.get`
+- 📊 Анализируем ботов и интересы
 """)
 
 if uploaded:
+    df = pd.read_csv(uploaded)
+    id_col = [col for col in df.columns if "id" in col.lower()][0]
+    ids = df[id_col].astype(int).tolist()
+
     vk_token = st.sidebar.text_input("Введите VK API токен", type="password")
-    if vk_token and st.sidebar.button("Собрать данные с VK API"):
-        st.info("Запрашиваем данные у VK...")
-    
-        def get_vk_user_data(user_ids, token):
-            import requests
-            ids_str = ",".join(str(uid) for uid in user_ids)
-            url = "https://api.vk.com/method/users.get"
-            params = {
-                "user_ids": ids_str,
-                "fields": ",".join([
-                    "activities", "bdate", "city", "country",
-                    "education", "last_seen", "occupation",
-                    "sex", "universities"
-                ]),
-                "access_token": token,
-                "v": "5.199"
-            }
-            resp = requests.get(url, params=params).json()
-            return pd.json_normalize(resp.get("response", []))
-    
-        # определяем колонку с ID
-        id_col = [col for col in df.columns if "id" in col.lower()][0]
-        user_ids = df[id_col].dropna().astype(int).tolist()
-        
-        vk_data = get_vk_user_data(user_ids[:1000], vk_token)  # ограничение VK API
-        st.session_state["vk_data"] = vk_data
-        st.success("Данные собраны!")
-    
-    df = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
+    if vk_token and st.sidebar.button("Собрать данные из VK API"):
+        import requests, time
 
-    if "vk_data" in st.session_state:
-        vk_data = st.session_state["vk_data"]
-        id_col = [col for col in df.columns if "id" in col.lower()][0]
-        df = df.merge(vk_data, left_on=id_col, right_on="id", how="left")
-    
-        df["last_seen_datetime"] = pd.to_datetime(
-            df["last_seen"].apply(lambda x: x.get("time") if isinstance(x, dict) else None),
-            unit="s"
-        )
-        df["university_name"] = df["education"].apply(lambda x: x.get("university_name") if isinstance(x, dict) else None)
-        df["faculty_name"] = df["education"].apply(lambda x: x.get("faculty_name") if isinstance(x, dict) else None)
-        df["faculty_from_universities"] = df["universities"].apply(
-            lambda x: x[0]["faculty_name"] if isinstance(x, list) and x and "faculty_name" in x[0] else None
-        )
+        BASE_URL = 'https://api.vk.com/method/'
+        API_VERSION = '5.199'
+        results = []
+        users_chunks = [ids[i:i+100] for i in range(0, len(ids), 100)]
 
-    df['ВИЗИТ В ВК'] = pd.to_datetime(df['ВИЗИТ В ВК'], errors='coerce')
-    first_q = df['group_count'].quantile(0.25)
-    bot_thr = df['group_count'].mean() + 2 * df['group_count'].std()
-    max_date = df['ВИЗИТ В ВК'].max()
-    days_since = (max_date - df['ВИЗИТ В ВК']).dt.days
-    df['Тип аккаунта'] = 'пользователь'
-    df.loc[(df['group_count']<=first_q) | ((df['group_count']>bot_thr)&(days_since>180)) | (days_since>360), 'Тип аккаунта'] = 'бот'
+        for idx, chunk in enumerate(users_chunks):
+            st.write(f"🔄 Обрабатываем пользователей {idx*100+1}-{idx*100+len(chunk)}")
+            users_resp = requests.get(BASE_URL + 'users.get', params={
+                'user_ids': ','.join(map(str, chunk)),
+                'fields': 'activities,bdate,city,country,education,last_seen,occupation,sex,universities',
+                'access_token': vk_token,
+                'v': API_VERSION
+            }).json()
 
-    # --- определение сегмента
+            for user in users_resp.get("response", []):
+                user_result = {
+                    id_col: user.get("id"),
+                    "first_name": user.get("first_name"),
+                    "last_name": user.get("last_name"),
+                    "activities": user.get("activities"),
+                    "bdate": user.get("bdate"),
+                    "city": user.get("city", {}).get("title") if isinstance(user.get("city"), dict) else None,
+                    "country": user.get("country", {}).get("title") if isinstance(user.get("country"), dict) else None,
+                    "university_name": user.get("education", {}).get("university_name") if isinstance(user.get("education"), dict) else None,
+                    "faculty_name": user.get("education", {}).get("faculty_name") if isinstance(user.get("education"), dict) else None,
+                    "last_seen_time": user.get("last_seen", {}).get("time") if isinstance(user.get("last_seen"), dict) else None,
+                    "occupation_type": user.get("occupation", {}).get("type") if isinstance(user.get("occupation"), dict) else None,
+                    "sex": user.get("sex"),
+                    "faculty_from_universities": user.get("universities", [{}])[0].get("faculty_name") if isinstance(user.get("universities"), list) else None,
+                }
+
+                # --- groups.get запрос ---
+                try:
+                    resp = requests.get(BASE_URL + 'groups.get', params={
+                        'user_id': user.get("id"),
+                        'access_token': vk_token,
+                        'v': API_VERSION,
+                        'extended': 1,
+                        'fields': 'activity',
+                        'count': 1000
+                    })
+                    groups_data = resp.json()
+                    if "response" in groups_data:
+                        groups = groups_data["response"]["items"]
+                        user_result["group_count"] = len(groups)
+                        for j, group in enumerate(groups[:50], start=1):
+                            user_result[f"group_{j}_name"] = group.get("name", "")
+                            user_result[f"group_{j}_activity"] = group.get("activity", "")
+                    elif "error" in groups_data:
+                        st.warning(f"Ошибка VK API: {groups_data['error']}")
+                except Exception as e:
+                    st.error(f"Ошибка при запросе groups.get: {e}")
+
+                results.append(user_result)
+                time.sleep(0.5)
+
+        df_vk = pd.DataFrame(results)
+        df = df.merge(df_vk, on=id_col, how="left")
+        st.session_state["df"] = df
+        st.success("✅ Данные собраны и объединены!")
+
+if "df" in st.session_state:
+    df = st.session_state["df"]
+
+    # --- метка "бот" ---
+    df["ВИЗИТ В ВК"] = pd.to_datetime(df["last_seen_time"], unit="s", errors='coerce')
+    first_q = df["group_count"].quantile(0.25)
+    bot_thr = df["group_count"].mean() + 2 * df["group_count"].std()
+    max_date = df["ВИЗИТ В ВК"].max()
+    days_since = (max_date - df["ВИЗИТ В ВК"]).dt.days
+    df["Тип аккаунта"] = "пользователь"
+    df.loc[(df["group_count"]<=first_q) | ((df["group_count"]>bot_thr)&(days_since>180)) | (days_since>360), "Тип аккаунта"] = "бот"
+
+    # --- сегменты ---
     theme_cols = [c for c in df.columns if re.match(r"group_\d+_activity$", c)]
-    
-   # --- применяем функцию к каждой строке ---
     df['segment'] = df.apply(
         lambda row: define_segment([
-            {"theme": str(row[c]).lower().strip()}
-            for c in theme_cols
-            if pd.notna(row[c]) and str(row[c]).strip()
-        ]),
-        axis=1
+            {"theme": str(row[c]).lower().strip()} for c in theme_cols if pd.notna(row[c]) and str(row[c]).strip()
+        ]), axis=1
     )
 
-    # --- фильтры
+    # --- фильтры ---
     account_filter = st.radio("Кого показывать:", ["Всех", "Только пользователей", "Только ботов"])
+    df_plot = df.copy()
     if account_filter == "Только пользователей":
-        df = df[df["Тип аккаунта"] == "пользователь"]
+        df_plot = df_plot[df_plot["Тип аккаунта"] == "пользователь"]
     elif account_filter == "Только ботов":
-        df = df[df["Тип аккаунта"] == "бот"]
+        df_plot = df_plot[df_plot["Тип аккаунта"] == "бот"]
 
-    segment_options = ["Все"] + sorted(df['segment'].dropna().unique())
+    segment_options = ["Все"] + sorted(df_plot['segment'].dropna().unique())
     selected_segment = st.selectbox("Фильтр по сегменту:", segment_options)
     if selected_segment != "Все":
-        df = df[df["segment"] == selected_segment]
+        df_plot = df_plot[df_plot["segment"] == selected_segment]
 
-    # --- отображение результата ---
+    # --- вывод ---
     st.subheader("Результаты")
     col1, col2, col3 = st.columns(3)
     col1.metric("Всего аккаунтов", len(df))
     col2.metric("Боты", (df["Тип аккаунта"] == "бот").sum())
     col3.metric("Пользователи", (df["Тип аккаунта"] == "пользователь").sum())
-    st.dataframe(df, use_container_width=True, height=600)
+    st.dataframe(df_plot, use_container_width=True, height=600)
 
-    # добавляем чекбокс: фильтровать ли только пользователей
-    show_only_users = st.checkbox("Показывать только пользователей в графике", value=True)
-
-    # создаём отдельную переменную для графика
-    df_plot = df[df['Тип аккаунта'] == 'пользователь'] if show_only_users else df
-
-    # считаем сегменты
     st.subheader("Распределение сегментов")
-    segment_counts = df_plot['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
+    show_users_only = st.checkbox("Только пользователи в графике", value=True)
+    df_graph = df_plot[df_plot["Тип аккаунта"] == "пользователь"] if show_users_only else df_plot
 
-    top_n = 10
-    top_segments = segment_counts.head(top_n).reset_index()
-    top_segments.columns = ['segment', 'count']
-    
-    top_n = st.slider("Сколько сегментов показать на графике:", min_value=5, max_value=30, value=10)
-
+    segment_counts = df_graph['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
+    top_n = st.slider("Сколько сегментов показать на графике:", 5, 30, 10)
     df_bar = segment_counts.head(top_n).reset_index()
-    st.write("🔍 Таблица для графика", df_bar)
-    
     df_bar.columns = ["Сегмент", "Количество"]
-
-    fig = px.bar(
-        df_bar,
-        x="Сегмент",
-        y="Количество",
-        title=f"Топ-{top_n} сегментов по интересам",
-        height=500
-    )
+    fig = px.bar(df_bar, x="Сегмент", y="Количество", title=f"Топ-{top_n} сегментов", height=500)
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("📦 Детали по ботам"):
-        df_bots = df[df["Тип аккаунта"] == "бот"]
-    
-        st.write("**Среднее число групп у ботов:**", round(df_bots["group_count"].mean(), 1))
-    
-        old_bots = df_bots[df_bots["ВИЗИТ В ВК"] < (max_date - pd.Timedelta(days=360))]
-        st.write("**Доля 'древних' аккаунтов (визит > 360 дней):**", f"{len(old_bots)/len(df_bots)*100:.1f}%")
-    
-        st.write("**Распределение сегментов среди ботов:**")
-        bot_segment_counts = df_bots['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False).head(10)
-        st.bar_chart(bot_segment_counts)
-    
+        bots = df[df["Тип аккаунта"] == "бот"]
+        st.write("Среднее число групп у ботов:", round(bots['group_count'].mean(), 2))
+        st.write("Ботов с визитом более 360 дней назад:", (days_since > 360).sum())
+        bot_segments = bots['segment'].fillna("Нет сегмента").value_counts().sort_values(ascending=False)
+        st.bar_chart(bot_segments)
+        st.dataframe(bots)
+
     # --- кнопка скачивания ---
     from io import BytesIO
     if st.sidebar.button("Скачать результат"):
         buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            df_plot.to_excel(writer, index=False)
-        st.download_button("📥 Скачать Excel", data=buffer.getvalue(), file_name="vk_analysis.xlsx")
-
+        df_plot.to_excel(buffer, index=False)
+        st.download_button("📥 Скачать Excel", buffer.getvalue(), file_name="vk_analysis.xlsx")
 else:
-    st.info("Загрузите VK таблицу через левую панель.")
+    st.info("Загрузите CSV с ID пользователей.")
