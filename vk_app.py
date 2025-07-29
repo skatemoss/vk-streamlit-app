@@ -436,7 +436,7 @@ if uploaded:
 
             for user in users_resp.get("response", []):
                 user_result = {
-                    "user_id": user.get("id"),
+                    "VK ID": user.get("id"),
                     "first_name": user.get("first_name"),
                     "last_name": user.get("last_name"),
                     "activities": user.get("activities"),
