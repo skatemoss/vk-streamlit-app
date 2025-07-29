@@ -515,6 +515,16 @@ if uploaded:
             with st.expander("📋 Ошибки при сборе данных"):
                 st.write("Ошибочные user_id:")
                 st.code("\n".join(map(str, errors)))
+                
+                # Кнопка скачивания
+                from io import StringIO
+                err_buffer = StringIO("\n".join(map(str, errors)))
+                st.download_button(
+                    label="📥 Скачать ошибки как .txt",
+                    data=err_buffer.getvalue(),
+                    file_name="vk_errors.txt",
+                    mime="text/plain"
+                )
 
 if "df" in st.session_state:
     df = st.session_state["df"]
