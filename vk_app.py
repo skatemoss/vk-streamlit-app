@@ -425,6 +425,8 @@ if uploaded:
         results = []
         users_chunks = [ids[i:i+100] for i in range(0, len(ids), 100)]
 
+        progress_bar = st.progress(0, text="⏳ Сбор данных из VK API...")
+        
         for idx, chunk in enumerate(users_chunks):
             st.write(f"🔄 Обрабатываем пользователей {idx*100+1}-{idx*100+len(chunk)}")
             users_resp = requests.get(BASE_URL + 'users.get', params={
@@ -433,57 +435,55 @@ if uploaded:
                 'access_token': vk_token,
                 'v': API_VERSION
             }).json()
-
+        
             for user in users_resp.get("response", []):
-                user_result = {
-                    "first_name": user.get("first_name"),
-                    "last_name": user.get("last_name"),
-                    "activities": user.get("activities"),
-                    "bdate": user.get("bdate"),
-                    "city": user.get("city", {}).get("title") if isinstance(user.get("city"), dict) else None,
-                    "country": user.get("country", {}).get("title") if isinstance(user.get("country"), dict) else None,
-                    "university_name": user.get("education", {}).get("university_name") if isinstance(user.get("education"), dict) else None,
-                    "faculty_name": user.get("education", {}).get("faculty_name") if isinstance(user.get("education"), dict) else None,
-                    "last_seen_time": user.get("last_seen", {}).get("time") if isinstance(user.get("last_seen"), dict) else None,
-                    "occupation_type": user.get("occupation", {}).get("type") if isinstance(user.get("occupation"), dict) else None,
-                    "sex": user.get("sex"),
-                    "faculty_from_universities": (
-                        user["universities"][0].get("faculty_name")
-                        if isinstance(user.get("universities"), list) and len(user["universities"]) > 0
-                        else None
-                    ),
-                }
-                user_result[id_col] = user.get("id")
-                user_result["VK ID"] = user.get("id")
-
-                # --- groups.get запрос ---
                 try:
-                    group_resp = requests.get(BASE_URL + 'groups.get', params={
+                    user_result = {
+                        "first_name": user.get("first_name"),
+                        "last_name": user.get("last_name"),
+                        "activities": user.get("activities"),
+                        "bdate": user.get("bdate"),
+                        "city": user.get("city", {}).get("title") if isinstance(user.get("city"), dict) else None,
+                        "country": user.get("country", {}).get("title") if isinstance(user.get("country"), dict) else None,
+                        "university_name": user.get("education", {}).get("university_name") if isinstance(user.get("education"), dict) else None,
+                        "faculty_name": user.get("education", {}).get("faculty_name") if isinstance(user.get("education"), dict) else None,
+                        "last_seen_time": user.get("last_seen", {}).get("time") if isinstance(user.get("last_seen"), dict) else None,
+                        "occupation_type": user.get("occupation", {}).get("type") if isinstance(user.get("occupation"), dict) else None,
+                        "sex": user.get("sex"),
+                        "faculty_from_universities": (
+                            user["universities"][0].get("faculty_name")
+                            if isinstance(user.get("universities"), list) and len(user["universities"]) > 0
+                            else None
+                        ),
+                        "VK ID": user.get("id"),
+                    }
+        
+                    # groups.get запрос
+                    resp = requests.get(BASE_URL + 'groups.get', params={
                         'user_id': user.get("id"),
                         'access_token': vk_token,
                         'v': API_VERSION,
                         'extended': 1,
                         'fields': 'activity',
                         'count': 1000
-                    }).json()
-                
-                    if "response" in group_resp:
-                        groups = group_resp["response"]["items"]
+                    })
+                    groups_data = resp.json()
+        
+                    if "response" in groups_data:
+                        groups = groups_data["response"]["items"]
                         user_result["group_count"] = len(groups)
                         for j, group in enumerate(groups[:50], start=1):
                             user_result[f"group_{j}_name"] = group.get("name", "")
                             user_result[f"group_{j}_activity"] = group.get("activity", "")
-                        results.append(user_result)  # ✅ добавляем только если всё хорошо
-                
-                    else:
-                        # 🔕 Молча пропускаем ошибку
-                        pass
-                
-                except Exception as e:
-                    pass  # 🔕 Не выводим даже здесь
-
-                results.append(user_result)
-                time.sleep(0.5)
+                        results.append(user_result)
+        
+                except Exception:
+                    pass
+        
+            progress_bar.progress((idx + 1) / len(users_chunks), text=f"⏳ Обработано {idx + 1} из {len(users_chunks)} пакетов")
+            time.sleep(0.5)
+        
+        progress_bar.empty()
 
         df_vk = pd.DataFrame(results)
         df = df.merge(df_vk, on=id_col, how="left")
