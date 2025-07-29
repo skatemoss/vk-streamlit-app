@@ -447,7 +447,11 @@ if uploaded:
                     "last_seen_time": user.get("last_seen", {}).get("time") if isinstance(user.get("last_seen"), dict) else None,
                     "occupation_type": user.get("occupation", {}).get("type") if isinstance(user.get("occupation"), dict) else None,
                     "sex": user.get("sex"),
-                    "faculty_from_universities": user.get("universities", [{}])[0].get("faculty_name") if isinstance(user.get("universities"), list) else None,
+                    "faculty_from_universities": (
+                        user["universities"][0].get("faculty_name")
+                        if isinstance(user.get("universities"), list) and len(user["universities"]) > 0
+                        else None
+                    ),
                 }
                 user_result[id_col] = user.get("id")
                 user_result["VK ID"] = user.get("id")
